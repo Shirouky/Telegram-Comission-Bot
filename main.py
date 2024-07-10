@@ -1,9 +1,12 @@
 from telebot import TeleBot, types
+import json
+
+with open("database.json", "r") as f:
+    json_object = json.load(f)
 
 
-bot = TeleBot('7353237356:AAFM6thNhdHSa-OQlN1UWWhwhD1ANuWqkNA')  # bot's token
-admin_chat_id = -4252954116
-
+bot = TeleBot(json_object['token'])  # bot's token
+admin_chat_id = json_object['admin_chat_id']
 
 bot.set_my_commands(
     commands=[
@@ -43,9 +46,7 @@ def press_buttons(call):
 
 
 def faq(message):
-    with open("database.txt", "r") as f:
-        message_id = int(f.read())
-        bot.copy_message(message.chat.id, admin_chat_id, message_id)
+    bot.copy_message(message.chat.id, admin_chat_id, json_object['faq_message_id'])
 
 
 @bot.message_handler(commands=['update'])
@@ -53,8 +54,9 @@ def update_faq(message):
     if message.reply_to_message:
         bot.send_message(admin_chat_id,
                          "FAQ обновлены")
-        with open("database.txt", "w") as f:
-            f.write(str(message.reply_to_message.id))
+        json_object['faq_message_id'] = message.reply_to_message.id
+        with open("database.json", "w") as f:
+            f.write(json_object)
     else:
         bot.send_message(admin_chat_id, 'Эта команда должна быть использована в ответ на сообщение')
 
