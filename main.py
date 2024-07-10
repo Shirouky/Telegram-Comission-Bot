@@ -4,8 +4,7 @@ import json
 with open("database.json", "r") as f:
     json_object = json.load(f)
 
-
-bot = TeleBot(json_object['token'])  # bot's token
+bot = TeleBot(json_object['token'])
 admin_chat_id = json_object['admin_chat_id']
 
 bot.set_my_commands(
@@ -18,7 +17,9 @@ bot.set_my_commands(
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "Привет! Это бот команды приемной комиссии ФБИУКС. *Здесь ты можешь узнать ответы на все свои вопросы*☺️📎", parse_mode= 'Markdown')
+    bot.send_message(message.chat.id,
+                     "Привет! Это бот команды приемной комиссии ФБИУКС. *Здесь ты можешь узнать ответы на все свои вопросы*☺️📎",
+                     parse_mode='Markdown')
     show_menu(message)
 
 
@@ -63,7 +64,8 @@ def update_faq(message):
 
 def ask_question(message):
     markup = types.ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, '❓ Задайте интересующий вопрос. Он будет отправлен администраторам. Позже с Вами свяжутся (если у Вас скрыт аккаунт, напишите, как с Вами связаться)',
+    bot.send_message(message.chat.id,
+                     '❓ Задайте интересующий вопрос. Он будет отправлен администраторам. Позже с Вами свяжутся (если у Вас скрыт аккаунт, напишите, как с Вами связаться)',
                      reply_markup=markup)
     bot.register_next_step_handler(message, get_question)
 
@@ -92,9 +94,7 @@ def get_phone(message):
 
 
 def show_map(message):
-    bot.send_message(message.chat.id,
-                     'Каширское ш., д. 31, корпус Б, кабинет 214',
-                     parse_mode='Markdown')
+    bot.send_message(message.chat.id, 'Каширское ш., д. 31, корпус Б, кабинет 214. *Чтобы попасть на территорию университета нужно зарегистрироваться на проходной (слева) и предъявить паспорт. Не забудь взять его с собой!*', parse_mode='Markdown')
     photo = open("map.png", 'rb')
     bot.send_photo(message.chat.id, photo)
     photo.close()
