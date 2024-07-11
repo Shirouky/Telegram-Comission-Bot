@@ -4,8 +4,8 @@ from json import load, dump
 with open("database.json", "r") as f:
     json_object = load(f)
 
-bot = TeleBot(json_object['token'])
-admin_chat_id = json_object['admin_chat_id']
+bot = TeleBot(json_object['bot_data']['token'])
+admin_chat_id = json_object['bot_data']['admin_chat_id']
 
 bot.set_my_commands(
     commands=[
@@ -48,7 +48,7 @@ def press_buttons(call):
 
 
 def faq(message):
-    bot.copy_message(message.chat.id, admin_chat_id, json_object['faq_message_id'])
+    bot.copy_message(message.chat.id, admin_chat_id, json_object['bot_data']['faq_message_id'])
     show_menu(message)
 
 
@@ -57,7 +57,7 @@ def update_faq(message):
     if message.reply_to_message:
         bot.send_message(admin_chat_id,
                          "FAQ обновлены")
-        json_object['faq_message_id'] = message.reply_to_message.id
+        json_object['bot_data']['faq_message_id'] = message.reply_to_message.id
         with open("database.json", "w") as f:
             dump(json_object, f)
     else:
@@ -76,7 +76,11 @@ def get_question(message):
     bot.send_message(message.chat.id, 'Спасибо за вопрос!')
     show_menu(message)
     bot.send_message(admin_chat_id, '❗ Новый вопрос ❗')
-    bot.forward_message(admin_chat_id, message.chat.id, message.id)
+    admin_message = bot.forward_message(admin_chat_id, message.chat.id, message.id)
+    question = {"user_id":  message.from_user.id, "chat_id":  message.chat.id, "message_id":  message.id, "in_admin_message_id":  admin_message.id}
+    json_object['messages'].append(question)
+    with open("database.json", "w") as f:
+        dump(json_object, f)
 
 
 def phone(message):
@@ -92,7 +96,25 @@ def get_phone(message):
                      reply_markup=markup)
     show_menu(message)
     bot.send_message(admin_chat_id, '❗ Новая заявка на звонок ❗')
-    bot.forward_message(admin_chat_id, message.chat.id, message.id)
+    admin_message = bot.forward_message(admin_chat_id, message.chat.id, message.id)
+    call = {"user_id":  message.from_user.id, "chat_id":  message.chat.id, "message_id":  message.id, "in_admin_message_id":  admin_message.id}
+    json_object['calls'].append(call)
+    with open("database.json", "w") as f:
+        dump(json_object, f)
+
+
+@bot.message_handler()
+def detect_reply(message):
+    if message.reply_to_message:
+        questions = json_object["messages"]
+        for question in questions:
+            if message.reply_to_message.id == question["in_admin_message_id"]:
+                bot.copy_message(admin_chat_id, question["chat_id"], message.id, reply_to_message_id=question["message_id"])
+                questions.remove(question)
+                json_object["messages"] = questions
+                with open("database.json", "w") as f:
+                    dump(json_object, f)
+                break
 
 
 def show_map(message):
