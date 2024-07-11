@@ -1,8 +1,8 @@
 from telebot import TeleBot, types
-import json
+from json import load, dump
 
 with open("database.json", "r") as f:
-    json_object = json.load(f)
+    json_object = load(f)
 
 bot = TeleBot(json_object['token'])
 admin_chat_id = json_object['admin_chat_id']
@@ -18,7 +18,8 @@ bot.set_my_commands(
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.send_message(message.chat.id,
-                     "Привет! Это бот команды приемной комиссии ФБИУКС. *Здесь ты можешь узнать ответы на все свои вопросы*☺️📎",
+                     "Привет! Это бот команды приемной комиссии ФБИУКС. *Здесь ты можешь узнать ответы на все свои "
+                     "вопросы*☺️📎",
                      parse_mode='Markdown')
     show_menu(message)
 
@@ -48,6 +49,7 @@ def press_buttons(call):
 
 def faq(message):
     bot.copy_message(message.chat.id, admin_chat_id, json_object['faq_message_id'])
+    show_menu(message)
 
 
 @bot.message_handler(commands=['update'])
@@ -57,7 +59,7 @@ def update_faq(message):
                          "FAQ обновлены")
         json_object['faq_message_id'] = message.reply_to_message.id
         with open("database.json", "w") as f:
-            f.write(json_object)
+            dump(json_object, f)
     else:
         bot.send_message(admin_chat_id, 'Эта команда должна быть использована в ответ на сообщение')
 
@@ -65,7 +67,7 @@ def update_faq(message):
 def ask_question(message):
     markup = types.ReplyKeyboardRemove()
     bot.send_message(message.chat.id,
-                     '❓ Задайте интересующий вопрос. Он будет отправлен администраторам. Позже с Вами свяжутся (если у Вас скрыт аккаунт, напишите, как с Вами связаться)',
+                     '❓ Задай интересующий вопрос. Он будет отправлен администраторам. Позже с тобой свяжутся (если у тебя скрыт аккаунт, напиши, как с тобой связаться)',
                      reply_markup=markup)
     bot.register_next_step_handler(message, get_question)
 
@@ -79,14 +81,14 @@ def get_question(message):
 
 def phone(message):
     markup = types.ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, 'Напишите свой номер телефона',
+    bot.send_message(message.chat.id, 'Напиши свой номер телефона',
                      reply_markup=markup)
     bot.register_next_step_handler(message, get_phone)
 
 
 def get_phone(message):
     markup = types.ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, 'С Вами свяжутся в ближайшее время',
+    bot.send_message(message.chat.id, 'С тобой свяжутся в ближайшее время',
                      reply_markup=markup)
     show_menu(message)
     bot.send_message(admin_chat_id, '❗ Новая заявка на звонок ❗')
@@ -101,4 +103,4 @@ def show_map(message):
     show_menu(message)
 
 
-bot.infinity_polling()
+bot.polling(none_stop=True, timeout=123)
