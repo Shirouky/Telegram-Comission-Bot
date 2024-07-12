@@ -1,3 +1,1 @@
-{"messages": [{"user_id": 1046291275, "chat_id": 1046291275, "message_id": 8, "in_admin_message_id": 12}],
-  "calls": [{"user_id": 1046291275, "chat_id": 1046291275, "message_id": 8, "in_admin_message_id": 12}],
-  "bot_data": {"token": "7359307806:AAG_mRp1Ps8xpl7sNkV7njVTjWvvddmYwuM", "admin_chat_id": -4286985361, "faq_message_id": 161}}
+{"questions": [], "phones": [], "bot_data": {"token": "7359307806:AAG_mRp1Ps8xpl7sNkV7njVTjWvvddmYwuM", "admin_chat_id": -4286985361, "faq_message_id": 100}}
