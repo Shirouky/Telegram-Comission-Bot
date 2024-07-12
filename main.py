@@ -14,6 +14,7 @@ bot.set_my_commands(
     scope=types.BotCommandScopeChat(admin_chat_id)
 )
 
+#sdvcsdv
 
 @bot.message_handler(commands=['start'])
 def start(message):
