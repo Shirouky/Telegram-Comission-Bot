@@ -4,8 +4,8 @@ from json import load, dump
 with open("database.json", "r") as f:
     json_object = load(f)
 
-bot = TeleBot(json_object['token'])
-admin_chat_id = json_object['admin_chat_id']
+bot = TeleBot(json_object['bot_data']['token'])
+admin_chat_id = json_object['bot_data']['admin_chat_id']
 
 bot.set_my_commands(
     commands=[
@@ -26,10 +26,10 @@ def start(message):
 
 @bot.message_handler(commands=['menu'])
 def show_menu(message):
-    keys = [[types.InlineKeyboardButton('FAQ', callback_data='faq')],
-            [types.InlineKeyboardButton('Задать свой вопрос', callback_data='question')],
-            [types.InlineKeyboardButton('Заказать звонок', callback_data='phone')],
-            [types.InlineKeyboardButton('Как до нас добраться?', callback_data='map')]]
+    keys = [[types.InlineKeyboardButton('❓ FAQ ❓', callback_data='faq')],
+            [types.InlineKeyboardButton('❔ Задать свой вопрос', callback_data='question')],
+            [types.InlineKeyboardButton('📞 Заказать звонок', callback_data='phone')],
+            [types.InlineKeyboardButton('🗺️ Как до нас добраться?', callback_data='map')]]
     keyboard = types.InlineKeyboardMarkup(keys)
 
     bot.send_message(message.chat.id, 'Что будем делать?', reply_markup=keyboard)
@@ -37,18 +37,18 @@ def show_menu(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def press_buttons(call):
-    if call.data == 'faq':
+    if call.data == "faq":
         faq(call.message)
-    elif call.data == 'question':
+    elif call.data == "question":
         ask_question(call.message)
-    elif call.data == 'phone':
-        phone(call.message)
-    elif call.data == 'map':
+    elif call.data == "phone":
+        phone_func(call.message)
+    elif call.data == "map":
         show_map(call.message)
 
 
 def faq(message):
-    bot.copy_message(message.chat.id, admin_chat_id, json_object['faq_message_id'])
+    bot.copy_message(message.chat.id, admin_chat_id, json_object['bot_data']['faq_message_id'])
     show_menu(message)
 
 
@@ -57,7 +57,7 @@ def update_faq(message):
     if message.reply_to_message:
         bot.send_message(admin_chat_id,
                          "FAQ обновлены")
-        json_object['faq_message_id'] = message.reply_to_message.id
+        json_object['bot_data']['faq_message_id'] = message.reply_to_message.id
         with open("database.json", "w") as f:
             dump(json_object, f)
     else:
@@ -73,13 +73,18 @@ def ask_question(message):
 
 
 def get_question(message):
-    bot.send_message(message.chat.id, 'Спасибо за вопрос!')
+    bot.send_message(message.chat.id, '❤️ Спасибо за вопрос! Скоро администраторы ответят на него')
     show_menu(message)
     bot.send_message(admin_chat_id, '❗ Новый вопрос ❗')
-    bot.forward_message(admin_chat_id, message.chat.id, message.id)
+    admin_message = bot.forward_message(admin_chat_id, message.chat.id, message.id)
+    bot.pin_chat_message(admin_chat_id, admin_message.id, disable_notification=False)
+    question = {"chat_id":  message.chat.id, "message_id":  message.id, "in_admin_message_id":  admin_message.id}
+    json_object["questions"].append(question)
+    with open("database.json", "w") as f:
+        dump(json_object, f)
 
 
-def phone(message):
+def phone_func(message):
     markup = types.ReplyKeyboardRemove()
     bot.send_message(message.chat.id, 'Напиши свой номер телефона',
                      reply_markup=markup)
@@ -92,7 +97,38 @@ def get_phone(message):
                      reply_markup=markup)
     show_menu(message)
     bot.send_message(admin_chat_id, '❗ Новая заявка на звонок ❗')
-    bot.forward_message(admin_chat_id, message.chat.id, message.id)
+    admin_message = bot.forward_message(admin_chat_id, message.chat.id, message.id)
+    bot.pin_chat_message(admin_chat_id, admin_message.id, disable_notification=True)
+    phone = {"chat_id":  message.chat.id, "message_id":  message.id, "in_admin_message_id":  admin_message.id}
+    json_object["phones"].append(phone)
+    with open("database.json", "w") as f:
+        dump(json_object, f)
+
+
+@bot.message_handler()
+def detect_reply(message):
+    if message.reply_to_message:
+        answered = False
+        questions = json_object["questions"]
+        for question in questions:
+            if message.reply_to_message.id == question["in_admin_message_id"]:
+                answered = True
+                bot.unpin_chat_message(admin_chat_id, message.reply_to_message.id)
+                bot.copy_message(question["chat_id"], admin_chat_id, message.id, reply_to_message_id=question["message_id"])
+                questions.remove(question)
+                json_object["questions"] = questions
+                with open("database.json", "w") as f:
+                    dump(json_object, f)
+
+        if not answered:
+            phones = json_object["phones"]
+            for phone in phones:
+                if message.reply_to_message.id == phone["in_admin_message_id"]:
+                    bot.unpin_chat_message(admin_chat_id, message.reply_to_message.id)
+                    phones.remove(phone)
+                    json_object["phones"] = phones
+                    with open("database.json", "w") as f:
+                        dump(json_object, f)
 
 
 def show_map(message):
