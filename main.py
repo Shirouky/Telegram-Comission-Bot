@@ -1,12 +1,14 @@
 from telebot import TeleBot, types
 from json import load, dump
-import text
 
-with open("database.json", "r") as f:
-    json_object = load(f)
+with open("database.json", 'r') as database:
+    data = load(database)
 
-bot = TeleBot(json_object["bot_data"]["token"])
-admin_chat_id = json_object["bot_data"]["admin_chat_id"]
+with open("text.json", 'r', encoding='utf-8') as t:
+    text = load(t)
+
+bot = TeleBot(data["bot_data"]["token"])
+admin_chat_id = data["bot_data"]["admin_chat_id"]
 
 bot.set_my_commands(
     commands=[
@@ -20,219 +22,182 @@ bot.set_my_commands(
 @bot.message_handler(commands=["start"])
 def start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton("Открыть меню"))
-    bot.send_message(message.chat.id, text.hello, parse_mode="Markdown", reply_markup=markup)
+    markup.add(types.KeyboardButton(text["text_menu"]))
+    bot.send_message(message.chat.id, text["hello"], reply_markup=markup, parse_mode="HTML")
 
 
 @bot.message_handler(commands=["news"])
 def create_news(message):
-    for id_ in json_object["news"]:
+    for id_ in data["news"]:
         bot.copy_message(id_, admin_chat_id, message.reply_to_message.id)
-    bot.send_message(admin_chat_id, "Новость разослана всем абитуриентам")
+    bot.send_message(admin_chat_id, text["admin_messages"]["news"])
 
 
 @bot.message_handler(commands=["delete"])
 def delete_question(message):
     if message.reply_to_message and message.chat.id == admin_chat_id:
-        answered = False
-        questions = json_object["questions"]
-        for question in questions:
-            if message.reply_to_message.id == question["in_admin_message_id"]:
-                answered = True
-                bot.unpin_chat_message(admin_chat_id, message.reply_to_message.id)
-                questions.remove(question)
-                json_object["questions"] = questions
-                with open("database.json", "w") as f:
-                    dump(json_object, f)
-
-        if not answered:
-            phones = json_object["phones"]
-            for phone in phones:
-                if message.reply_to_message.id == phone["in_admin_message_id"]:
-                    bot.unpin_chat_message(admin_chat_id, message.reply_to_message.id)
-                    phones.remove(phone)
-                    json_object["phones"] = phones
-                    with open("database.json", "w") as f:
-                        dump(json_object, f)
+        remove_from_db(message, "questions")
+        remove_from_db(message, "phones")
     else:
-        bot.send_message(message.chat.id,
-                         "Эта команда должна быть использована в ответ на сообщение", parse_mode="Markdown")
+        bot.send_message(message.chat.id, text["errors"]["reply"])
 
 
-@bot.message_handler(content_types=["text"])
+@bot.message_handler(content_types=["text", "photo"])
 def show_menu(message):
-    if message.text == "Открыть меню":
-        news = which_button(message.chat.id)
-        keys = [[types.InlineKeyboardButton("❓ FAQ ❓", callback_data="faq")],
-                [types.InlineKeyboardButton("❔ Задать свой вопрос", callback_data="question")],
-                [types.InlineKeyboardButton("📞 Запросить звонок", callback_data="phone")],
-                [types.InlineKeyboardButton("🗺️ Как до нас добраться?", callback_data="map")],
-                [types.InlineKeyboardButton(news[0], callback_data=news[1])]]
+    if message.text == text["text_menu"] and message.chat.id != admin_chat_id:
+        news = str(message.chat.id in data["news"])
+        keys = []
+        buttons = list(text["menu"].keys())
+        for button in buttons:
+            title = text["menu"][button]
+            keys.append([types.InlineKeyboardButton(title, callback_data=button)])
+        keys.append([types.InlineKeyboardButton(text["news_buttons"][news]["button"],
+                                                callback_data=text["news_buttons"][news]["call"])])
         keyboard = types.InlineKeyboardMarkup(keys)
 
-        bot.send_message(message.chat.id, "Что будем делать?", reply_markup=keyboard)
+        bot.send_message(message.chat.id, text["menu_ask"], reply_markup=keyboard)
 
     elif message.reply_to_message and message.chat.id == admin_chat_id:
-        answered = False
-        questions = json_object["questions"]
-        for question in questions:
-            if message.reply_to_message.id == question["in_admin_message_id"]:
-                answered = True
-                bot.unpin_chat_message(admin_chat_id, message.reply_to_message.id)
-                bot.copy_message(question["chat_id"], admin_chat_id, message.id,
-                                 reply_to_message_id=question["message_id"])
-                questions.remove(question)
-                json_object["questions"] = questions
-                with open("database.json", "w") as f:
-                    dump(json_object, f)
+        question = remove_from_db(message, "questions")
+        bot.copy_message(question["chat_id"], admin_chat_id, message.id, reply_to_message_id=question["message_id"])
+        remove_from_db(message, "phones")
 
-        if not answered:
-            phones = json_object["phones"]
-            for phone in phones:
-                if message.reply_to_message.id == phone["in_admin_message_id"]:
-                    bot.unpin_chat_message(admin_chat_id, message.reply_to_message.id)
-                    phones.remove(phone)
-                    json_object["phones"] = phones
-                    with open("database.json", 'w') as f:
-                        dump(json_object, f)
+    elif message.chat.id != admin_chat_id:
+        bot.send_message(message.chat.id, text["errors"]["text"], reply_to_message_id=message.id)
 
 
 @bot.callback_query_handler(func=lambda call: True)
 def press_buttons(call):
     match call.data:
-        case "faq":
-            faq(call.message)
-        case "question":
-            ask_question(call.message)
-        case "phone":
-            phone_func(call.message)
+        case "questions" | "phones":
+            ask_info(call.message, call.data)
         case "map":
             show_map(call.message)
+        case "years":
+            show_years(call.message)
         case "addnews":
-            add_news(call.message)
+            data["news"].append(call.message.chat.id)
+            change_news(call.message)
         case "removenews":
-            remove_news(call.message)
-        case "faculty":
-            bot.send_message(call.message.chat.id, text.faculty, parse_mode="HTML")
+            data["news"].remove(call.message.chat.id)
+            change_news(call.message)
+        case "faq":
+            bot.delete_message(call.message.chat.id, call.message.id)
+            faq(call.message)
         case "program":
+            bot.delete_message(call.message.chat.id, call.message.id)
             faq_program(call.message)
-        case "vsb":
-            bot.send_message(call.message.chat.id, text.vsb, parse_mode="HTML")
-        case "exams":
-            bot.send_message(call.message.chat.id, text.exams, parse_mode="HTML")
-        case "dorm":
-            bot.send_message(call.message.chat.id, text.dorm, parse_mode="HTML")
-        case "work":
-            bot.send_message(call.message.chat.id, text.work, parse_mode="HTML")
-        case "bi":
-            bot.send_message(call.message.chat.id, text.bi, parse_mode="HTML")
-        case "sa":
-            bot.send_message(call.message.chat.id, text.sa, parse_mode="HTML")
-        case "other":
-            bot.send_message(call.message.chat.id, text.other, parse_mode="HTML")
+        case "bi" | "sa":
+            bot.delete_message(call.message.chat.id, call.message.id)
+            faq_bi_sa(call.message, call.data)
+        case "faculty" | "vsb" | "work" | "dorm" | "exams" | "other":
+            bot.delete_message(call.message.chat.id, call.message.id)
+            send_text(call.message, text["faq"][call.data]["text"], "faq")
+        case "bi_ii" | "bi_ce" | "work_bi" | "vsb_bi" | "more_bi":
+            bot.delete_message(call.message.chat.id, call.message.id)
+            send_text(call.message, text["faq"]["program"]["bi"][call.data]["text"], "bi")
+        case "sa_prog" | "work_sa" | "vsb_sa" | "more_sa":
+            bot.delete_message(call.message.chat.id, call.message.id)
+            send_text(call.message, text["faq"]["program"]["sa"][call.data]["text"], "sa")
+
+
+def send_text(message, button_text, callback):
+    keys = [[types.InlineKeyboardButton(text["text_back"], callback_data=callback)]]
+    keyboard = types.InlineKeyboardMarkup(keys)
+    bot.send_message(message.chat.id, button_text, parse_mode="HTML", reply_markup=keyboard)
 
 
 def faq(message):
-    keys = [
-        [types.InlineKeyboardButton("Факультет", callback_data="faculty"),
-         types.InlineKeyboardButton("Программы", callback_data="program")],
-        [types.InlineKeyboardButton("Временный студенческий билет", callback_data="vsb")],
-        [types.InlineKeyboardButton("Вступительные экзамены", callback_data="exams")],
-        [types.InlineKeyboardButton("Общежития", callback_data="dorm")],
-        [types.InlineKeyboardButton("Трудоустройство", callback_data="work")],
-        [types.InlineKeyboardButton("Другое", callback_data="alt")]]
+    keys = [[types.InlineKeyboardButton(text["faq"]["faculty"]["title"], callback_data="faculty"),
+             types.InlineKeyboardButton(text["faq"]["program"]["title"], callback_data="program")]]
+    buttons = list(text["faq"].keys())[5:]
+    for button in buttons:
+        title = text["faq"][button]["title"]
+        keys.append([types.InlineKeyboardButton(title, callback_data=button)])
     keyboard = types.InlineKeyboardMarkup(keys)
-    bot.send_message(message.chat.id, "Что Вы хотите узнать?", reply_markup=keyboard)
+    bot.send_message(message.chat.id, text["faq"]["text"], reply_markup=keyboard)
 
 
 def faq_program(message):
-    keys = [[types.InlineKeyboardButton("Бизнес-информатика", callback_data="bi")],
-            [types.InlineKeyboardButton("Системный анализ", callback_data="sa")]]
+    keys = []
+    buttons = list(text["faq"]["program"].keys())[1:]
+    for button in buttons:
+        title = text["faq"]["program"][button]["title"]
+        keys.append([types.InlineKeyboardButton(title, callback_data=button)])
+    keys.append([types.InlineKeyboardButton(text["text_back"], callback_data="faq")])
     keyboard = types.InlineKeyboardMarkup(keys)
-    bot.send_message(message.chat.id, "Какое направление Вам интересно?", reply_markup=keyboard)
+    bot.send_message(message.chat.id, text["faq"]["text_program"], reply_markup=keyboard)
 
 
-def ask_question(message):
-    bot.send_message(message.chat.id, text.ask_question)
-    bot.register_next_step_handler(message, get_question)
+def faq_bi_sa(message, program):
+    keys = []
+    buttons = list(text["faq"]["program"][program].keys())[1:]
+    for button in buttons:
+        title = text["faq"]["program"][program][button]["title"]
+        keys.append([types.InlineKeyboardButton(title, callback_data=button)])
+    keys.append([types.InlineKeyboardButton(text["text_back"], callback_data="program")])
+    keyboard = types.InlineKeyboardMarkup(keys)
+    bot.send_message(message.chat.id, text["faq"]["text_bi_sa"], reply_markup=keyboard)
 
 
-def get_question(message):
-    bot.send_message(message.chat.id, text.thanks_question)
-    if check_in_db(message):
-        bot.send_message(admin_chat_id, "❗ Новый вопрос ❗")
-        admin_message = bot.forward_message(admin_chat_id, message.chat.id, message.id)
-        bot.pin_chat_message(admin_chat_id, admin_message.id, disable_notification=False)
-        question = {"chat_id": message.chat.id, "message_id": message.id, "in_admin_message_id": admin_message.id}
-        json_object["questions"].append(question)
-        with open("database.json", "w") as f:
-            dump(json_object, f)
+def ask_info(message, request):
+    bot.send_message(message.chat.id, text["ask"][request])
+    bot.register_next_step_handler(message, get_info, request)
 
 
-def phone_func(message):
-    bot.send_message(message.chat.id, "Напишите свой номер телефона")
-    bot.register_next_step_handler(message, get_phone)
-
-
-def get_phone(message):
-    markup = types.ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, "С Вами свяжутся в ближайшее время",
-                     reply_markup=markup)
-    if check_in_db(message):
-        bot.send_message(admin_chat_id, "❗ Новая заявка на звонок ❗")
-        admin_message = bot.forward_message(admin_chat_id, message.chat.id, message.id)
-        bot.pin_chat_message(admin_chat_id, admin_message.id, disable_notification=True)
-        phone = {"chat_id": message.chat.id, "message_id": message.id, "in_admin_message_id": admin_message.id}
-        json_object["phones"].append(phone)
-        with open("database.json", "w") as f:
-            dump(json_object, f)
+def get_info(message, request):
+    if message.text != text["text_menu"]:
+        bot.send_message(message.chat.id, text["thanks"][request])
+        if check_in_db(message, "questions") and check_in_db(message, "phones"):
+            bot.send_message(admin_chat_id, text["admin_messages"][request])
+            admin_message = bot.forward_message(admin_chat_id, message.chat.id, message.id)
+            bot.pin_chat_message(admin_chat_id, admin_message.id, disable_notification=False)
+            request_data = {"chat_id": message.chat.id, "message_id": message.id,
+                            "admin_chat_message_id": admin_message.id}
+            data[request].append(request_data)
+            update_db()
+    else:
+        show_menu(message)
 
 
 def show_map(message):
-    bot.send_message(message.chat.id, text.map, parse_mode="HTML")
-    photo = open("map.png", "rb")
-    bot.send_photo(message.chat.id, photo)
-    photo.close()
+    with open("map.png", "rb") as photo:
+        bot.send_photo(message.chat.id, photo, caption=text["map"], parse_mode="HTML")
 
 
-def check_in_db(message):
-    answered = False
-    double = True
-    questions = json_object["questions"]
-    for question in questions:
-        if message.chat.id == question["chat_id"] and message.id == question["message_id"]:
-            answered = True
-            double = True
-            break
-
-    if not answered:
-        phones = json_object["phones"]
-        for phone in phones:
-            if message.chat.id == phone["chat_id"] and message.id == phone["message_id"]:
-                double = True
-                break
-    return double
+def show_years(message):
+    with open("years.jpg", "rb") as photo:
+        bot.delete_message(message.chat.id, message.id)
+        keys = [[types.InlineKeyboardButton(text["text_back"], callback_data="faq")]]
+        keyboard = types.InlineKeyboardMarkup(keys)
+        bot.send_photo(message.chat.id, photo, caption=text["faq"]["years"]["text"], parse_mode="HTML", reply_markup=keyboard)
 
 
-def which_button(chat_id):
-    if chat_id not in json_object["news"]:
-        return ["💌 Подписаться на рассылку", "addnews"]
-    else:
-        return ["📩 Отписаться от рассылки", "removenews"]
+def change_news(message):
+    update_db()
+    subscribe = str(message.chat.id in data["news"])
+    bot.send_message(message.chat.id, text["news_buttons"][subscribe]["text"])
 
 
-def add_news(message):
-    json_object["news"].append(message.chat.id)
+def update_db():
     with open("database.json", "w") as f:
-        dump(json_object, f)
-    bot.send_message(message.chat.id, "❤️ Вы успешно подписались на рассылку!")
+        dump(data, f)
 
 
-def remove_news(message):
-    json_object["news"].remove(message.chat.id)
-    with open("database.json", "w") as f:
-        dump(json_object, f)
-    bot.send_message(message.chat.id, "💔 Вы отписались от рассылки")
+def check_in_db(message, title):
+    for elem in data[title]:
+        if message.chat.id == elem["chat_id"] and message.id == elem["message_id"]:
+            return False
+    return True
+
+
+def remove_from_db(message, title):
+    for elem in data[title]:
+        if message.reply_to_message.id == elem["admin_chat_message_id"]:
+            bot.unpin_chat_message(admin_chat_id, message.reply_to_message.id)
+            data[title].remove(elem)
+            update_db()
+            return elem
 
 
 bot.infinity_polling()
