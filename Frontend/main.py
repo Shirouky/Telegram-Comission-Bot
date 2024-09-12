@@ -1,3 +1,5 @@
+from requests_api import *
+
 from telebot import TeleBot, types
 from json import load, dump
 
@@ -22,15 +24,20 @@ bot.set_my_commands(
 @bot.message_handler(commands=["start"])
 def start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton(text["text_menu"]))
-    bot.send_message(message.chat.id, text["hello"], reply_markup=markup, parse_mode="HTML")
+    text_ = get_text({"data": ["text_menu", "hello"]}).json()["data"]
+    markup.add(types.KeyboardButton(text_["text_menu"]))
+    bot.send_message(message.chat.id, text_["hello"], reply_markup=markup, parse_mode="HTML")
 
 
 @bot.message_handler(commands=["news"])
 def create_news(message):
-    for id_ in data["news"]:
+    ids = create_notification({"message_id": message.reply_to_message.id, "admin_id": message.from_user.id, "text": message.reply_to_message.text})
+    for id_ in ids:
         bot.copy_message(id_, admin_chat_id, message.reply_to_message.id)
-    bot.send_message(admin_chat_id, text["admin_messages"]["news"])
+    text_ = get_text("admin_message_news")
+    # for id_ in data["news"]:
+    #     bot.copy_message(id_, admin_chat_id, message.reply_to_message.id)
+    # bot.send_message(admin_chat_id, text["admin_messages"]["news"])
 
 
 @bot.message_handler(commands=["delete"])
@@ -148,14 +155,15 @@ def ask_info(message, request):
 def get_info(message, request):
     if message.text != text["text_menu"]:
         bot.send_message(message.chat.id, text["thanks"][request])
-        if check_in_db(message, "questions") and check_in_db(message, "phones"):
-            bot.send_message(admin_chat_id, text["admin_messages"][request])
-            admin_message = bot.forward_message(admin_chat_id, message.chat.id, message.id)
-            bot.pin_chat_message(admin_chat_id, admin_message.id, disable_notification=False)
-            request_data = {"chat_id": message.chat.id, "message_id": message.id,
-                            "admin_chat_message_id": admin_message.id}
-            data[request].append(request_data)
-            update_db()
+
+        bot.send_message(admin_chat_id, text["admin_messages"][request])
+        admin_message = bot.forward_message(admin_chat_id, message.chat.id, message.id)
+        bot.pin_chat_message(admin_chat_id, admin_message.id, disable_notification=True)
+
+        request_data = {"chat_id": message.chat.id, "message_id": message.id,
+                        "admin_chat_message_id": admin_message.id}
+        data[request].append(request_data)
+        update_db()
     else:
         show_menu(message)
 
@@ -170,7 +178,8 @@ def show_years(message):
         bot.delete_message(message.chat.id, message.id)
         keys = [[types.InlineKeyboardButton(text["text_back"], callback_data="faq")]]
         keyboard = types.InlineKeyboardMarkup(keys)
-        bot.send_photo(message.chat.id, photo, caption=text["faq"]["years"]["text"], parse_mode="HTML", reply_markup=keyboard)
+        bot.send_photo(message.chat.id, photo, caption=text["faq"]["years"]["text"], parse_mode="HTML",
+                       reply_markup=keyboard)
 
 
 def change_news(message):
@@ -182,13 +191,6 @@ def change_news(message):
 def update_db():
     with open("database.json", "w") as f:
         dump(data, f)
-
-
-def check_in_db(message, title):
-    for elem in data[title]:
-        if message.chat.id == elem["chat_id"] and message.id == elem["message_id"]:
-            return False
-    return True
 
 
 def remove_from_db(message, title):

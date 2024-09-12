@@ -1,0 +1,2 @@
+database.db merge=data_sql
+database.json merge=data_json
