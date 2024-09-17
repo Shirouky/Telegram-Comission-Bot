@@ -5,6 +5,7 @@ from datetime import datetime
 
 class BaseUser(BaseModel):
     user_id: int
+    chat_id: int
     username: str
     is_premium: bool
 

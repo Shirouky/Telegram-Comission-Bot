@@ -11,6 +11,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer)
+    chat_id = Column(Integer)
     username = Column(String)
     date_started = Column(DateTime)
     is_premium = Column(Boolean, default=False)
