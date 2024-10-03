@@ -23,7 +23,6 @@ class UserModel(BaseUser):
 
 class BaseMessage(BaseModel):
     message_id: int
-    user_id: int
     text: str
     user_type: str
 
@@ -85,7 +84,6 @@ class AnswerModel(BaseModel):
 
 class BasePhone(BaseModel):
     user_id: int
-    user_chat_id: int
     user_message_id: int
     admin_message_id: int
     phone: str

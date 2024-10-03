@@ -35,7 +35,7 @@ class Message(Base):
 
     def __repr__(self):
         return "<User('%s', '%s', '%s', '%s', '%s', '%s')>" % (
-            self.id, self.user_id, self.username, self.text, self.date, self.from_user)
+            self.id, self.chat_id, self.username, self.text, self.date, self.from_user)
 
 
 class BotText(Base):
@@ -60,8 +60,8 @@ class Question(Base):
     date_added = Column(DateTime)
     date_answered = Column(DateTime, default=datetime.min)
 
-    user_chat_id = Column(Integer)
     user_message_id = Column(Integer)
+    user_chat_id = Column(Integer)
     admin_message_id = Column(Integer)
 
     user_id = Column(Integer, ForeignKey("users.id"))
@@ -75,9 +75,9 @@ class Question(Base):
 
     @property
     def __repr__(self):
-        return "<Question('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')>" % (
+        return "<Question('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')>" % (
             self.id, self.text, self.answer_text, self.answer_id, self.date_added, self.date_answered,
-            self.user_chat_id, self.user_message_id, self.user_id, self.admin_id, self.username, self.admin_name,
+            self.user_chat_id, self.user_message_id, self.admin_id, self.username, self.admin_name,
             self.is_deleted, self.has_photo)
 
 
@@ -89,17 +89,18 @@ class Phone(Base):
     is_answered = Column(Boolean, default=False)
     date_added = Column(DateTime)
     date_answered = Column(DateTime, default=datetime.min)
-    user_chat_id = Column(Integer)
+    user_message_id = Column(Integer)
     admin_message_id = Column(Integer)
+    user_chat_id = Column(Integer)
     user_id = Column(Integer, ForeignKey("users.id"))
     admin_id = Column(Integer, ForeignKey("users.id"))
     users = relationship("User", foreign_keys=[user_id])
     admins = relationship("User", foreign_keys=[admin_id])
 
     def __repr__(self):
-        return "<Phone('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')>" % (
-            self.id, self.number, self.is_answered, self.date_added, self.date_answered, self.user_chat_id,
-            self.user_id, self.admin_id)
+        return "<Phone('%s', '%s', '%s', '%s', '%s', '%s', '%s')>" % (
+            self.id, self.number, self.is_answered, self.date_added, self.date_answered, self.user_id,
+             self.admin_id)
 
 
 class Action(Base):
@@ -109,7 +110,6 @@ class Action(Base):
     title = Column(String)
     date = Column(DateTime)
     user_id = Column(Integer, ForeignKey("users.id"))
-    chat_id = Column(Integer)
 
     def __repr__(self):
         return "<Action('%s', '%s', '%s', '%s')>" % (

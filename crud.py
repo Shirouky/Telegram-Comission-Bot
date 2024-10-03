@@ -1,30 +1,31 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
 from models_orm import User, Message, BotText, Question, Action, Phone, Notification
 from models_api import *
 
 
-def get_user(db: Session, user_id: int):
-    return db.query(User).filter(User.user_id == user_id).first()
+def get_user(db: Session, chat_id: int, user_id: int):
+    return db.query(User).filter(and_(User.chat_id == chat_id, User.user_id == user_id)).first()
 
 
 def get_subscribers(db: Session):
     return db.query(User).filter(User.subscribed).all()
 
 
-def change_subscribe(db: Session, user_id: int):
-    db_user = db.query(User).filter(User.user_id == user_id).first()
-    db_user.subscribe = not db_user.subscribe
+def change_subscribe_db(db: Session, chat_id: int, user_id: int):
+    db_user = get_user(db=db, chat_id=chat_id, user_id=user_id)
+    db_user.subscribed = not db_user.subscribed
     db.commit()
     db.refresh(db_user)
     return db_user
 
 
-def check_subscribe(db: Session, user_id: int):
-    return db.query(User).filter(User.user_id == user_id).first().subscribe
+def check_subscribe(db: Session, chat_id: int, user_id: int):
+    return get_user(db=db, chat_id=chat_id, user_id=user_id).subscribed
 
 
 def create_user(db: Session, user):
-    db_user = User(user_id=user.user_id, username=user.username, is_premium=user.is_premium,
+    db_user = User(username=user.username, user_id=user.user_id, chat_id=user.chat_id, is_premium=user.is_premium,
                    date_started=datetime.now())
     db.add(db_user)
     db.commit()
@@ -37,8 +38,7 @@ def get_message(db: Session, message_id: int):
 
 
 def create_message(db: Session, message: BaseMessage):
-    db_message = Message(message_id=message.message_id,
-                         user_id=message.user_id, date=datetime.now(), text=message.text,
+    db_message = Message(message_id=message.message_id, date=datetime.now(), text=message.text,
                          user_type=message.user_type)
 
     db.add(db_message)
@@ -57,44 +57,103 @@ def get_text(db: Session, callback_text):
 
 def start(db: Session, message):
     user_id = message.from_user.id
-    user = BaseUser(user_id=user_id, username=message.from_user.username, chat_id=message.chat.id,
+    chat_id = message.chat.id
+    user = BaseUser(username=message.from_user.username, user_id=user_id, chat_id=chat_id,
                     is_premium=message.from_user.is_premium != None)
     create_user(db=db, user=user)
-    action = BaseAction(title="start", user_id=message.from_user.id, chat_id=message.chat.id)
+    action = BaseAction(title="start", user_id=user_id, chat_id=chat_id)
     create_action(db=db, action=action)
     return get_text(db=db, callback_text=["text_menu", "text_hello"])
 
 
-def faq(db: Session, message):
-    action = BaseAction(title="open faq", user_id=message.from_user.id, chat_id=message.chat.id)
+def change_subscribe(db: Session, user_id: int, chat_id: int):
+    action = BaseAction(title="change subscribe", chat_id=chat_id, user_id=user_id)
     create_action(db=db, action=action)
-    return get_text(db=db, callback_text=["text_menu", "text_hello"])
+    change_subscribe_db(db, user_id, chat_id)
+    text = []
+    if check_subscribe(db=db, user_id=user_id, chat_id=chat_id):
+        text.append("text_news_unsubscribed")
+    else:
+        text.append("text_news_subscribed")
+    return get_text(db=db, callback_text=text)
 
 
-def open_menu(db: Session, message):
-    user_id = message.from_user.id
-    action = BaseAction(title="open menu", user_id=user_id, chat_id=message.chat.id)
+def open_menu(db: Session, user_id: int, chat_id: int):
+    action = BaseAction(title="open menu", user_id=user_id, chat_id=chat_id)
     create_action(db=db, action=action)
-    text = ["text_menu_ask", "button_question", "button_phone", "button_map"]
-    if user_is_subscribed(db=db, user_id=user_id):
+    text = ["text_menu_ask", "button_faq", "button_question", "button_phone", "button_map"]
+    if check_subscribe(db=db, user_id=user_id, chat_id=chat_id):
         text.append("button_news_subscribed")
     else:
         text.append("button_news_unsubscribed")
     return get_text(db=db, callback_text=text)
 
 
-def open_faq(db: Session, message):
-    user_id = message.from_user.id
-    action = BaseAction(title="open faq", user_id=user_id, chat_id=message.chat.id)
+def open_faq(db: Session, user_id: int, chat_id: int):
+    action = BaseAction(title="open faq", user_id=user_id, chat_id=chat_id)
     create_action(db=db, action=action)
     text = ["text_faq_ask", "button_faculty", "button_program", "button_years", "button_vsb", "button_work",
-            "button_dorm",
-            "button_exams", "button_other"]
+            "button_dorm", "button_exams", "button_other"]
     return get_text(db=db, callback_text=text)
 
 
-def user_is_subscribed(db: Session, user_id: int):
-    return db.query(User).filter(User.user_id == user_id).first().subscribed
+def open_faq_program(db: Session, user_id: int, chat_id: int):
+    action = BaseAction(title="open faq program", user_id=user_id, chat_id=chat_id)
+    create_action(db=db, action=action)
+    text = ["text_program_ask", "button_bi", "button_sa", "button_back"]
+    return get_text(db=db, callback_text=text)
+
+
+def open_faq_bi(db: Session, user_id: int, chat_id: int):
+    action = BaseAction(title="open faq bi", user_id=user_id, chat_id=chat_id)
+    create_action(db=db, action=action)
+    text = ["text_bi_sa_ask", "button_bi_ce", "button_bi_ii", "button_bi_vsb", "button_bi_work", "button_bi_more",
+            "button_back"]
+    return get_text(db=db, callback_text=text)
+
+
+def open_faq_sa(db: Session, user_id: int, chat_id: int):
+    action = BaseAction(title="open faq sa", user_id=user_id, chat_id=chat_id)
+    create_action(db=db, action=action)
+    text = ["text_bi_sa_ask", "button_sa_program", "button_sa_vsb", "button_sa_work", "button_sa_more", "button_back"]
+    return get_text(db=db, callback_text=text)
+
+
+def show_years(db: Session, user_id: int, chat_id: int):
+    action = BaseAction(title="show years image", user_id=user_id, chat_id=chat_id)
+    create_action(db=db, action=action)
+    text = ["text_years", "button_back"]
+    return get_text(db=db, callback_text=text)
+
+
+def show_map(db: Session, user_id: int, chat_id: int):
+    action = BaseAction(title="show map image", user_id=user_id, chat_id=chat_id)
+    create_action(db=db, action=action)
+    text = ["text_map", "button_back"]
+    return get_text(db=db, callback_text=text)
+
+
+def get_button_text(db: Session, callback: str, user_id: int, chat_id: int):
+    action = BaseAction(title=callback, user_id=user_id, chat_id=chat_id)
+    create_action(db=db, action=action)
+    text = [callback, "button_back"]
+    return get_text(db=db, callback_text=text)
+
+
+def ask_info(db: Session, user_id: int, chat_id: int, title: str):
+    action = BaseAction(title="ask " + title, user_id=user_id, chat_id=chat_id)
+    create_action(db=db, action=action)
+    text = [title, "button_back"]
+    return get_text(db=db, callback_text=text)
+
+
+def save_question(db: Session, user_id: int, chat_id: int, **kwargs):
+    action = BaseAction(title="save question", user_id=user_id, chat_id=chat_id)
+    create_action(db=db, action=action)
+    question = BaseQuestion(**(kwargs | {"user_id": user_id, "user_chat_id": chat_id}))
+    create_question(db=db, question=question)
+    text = ["text_menu", "text_question_thanks", "text_admin_question"]
+    return get_text(db=db, callback_text=text)
 
 
 def create_text(db: Session, text: BaseText):
@@ -112,7 +171,7 @@ def get_question(db: Session, question_id: int):
 def create_question(db: Session, question: BaseQuestion):
     db_question = Question(text=question.text, date_added=datetime.now(), has_photo=question.has_photo,
                            user_chat_id=question.user_chat_id, user_message_id=question.user_message_id,
-                           user_id=question.user_id, admin_message_id=question.admin_message_id)
+                           admin_message_id=question.admin_message_id)
 
     db.add(db_question)
     db.commit()
@@ -147,7 +206,7 @@ def get_phone(db: Session, phone_id: int):
 
 def create_phone(db: Session, phone: BasePhone):
     db_phone = Phone(phone=phone.phone, date_added=datetime.now(), user_chat_id=phone.user_chat_id,
-                     user_message_id=phone.message_id, user_id=phone.user_id)
+                     user_message_id=phone.message_id, admin_message_id=phone.admin_message_id)
 
     db.add(db_phone)
     db.commit()
@@ -168,7 +227,8 @@ def get_action(db: Session, action_id: int):
 
 
 def create_action(db: Session, action: BaseAction):
-    db_action = Action(user_id=action.user_id, chat_id=action.chat_id, date=datetime.now(), title=action.title)
+    db_user = get_user(db, action.chat_id, action.user_id)
+    db_action = Action(user_id=db_user.id, date=datetime.now(), title=action.title)
 
     db.add(db_action)
     db.commit()
